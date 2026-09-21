@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#070a0f] text-slate-100 antialiased font-sans selection:bg-sky-500/25 selection:text-sky-200;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight text-slate-100;
+  }
+}
+
+/* Tabular Figures for All Telemetry */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom GIS Elevation / Topographic Motif */
+.bg-topo-pattern {
+  background-image: radial-gradient(circle at 1px 1px, rgba(56, 189, 248, 0.08) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+.bg-elevation-lines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(30, 41, 59, 0.25) 0px,
+    rgba(30, 41, 59, 0.25) 1px,
+    transparent 1px,
+    transparent 24px
+  );
+}
+
+.bg-radial-glow {
+  background: radial-gradient(600px circle at 15% 10%, rgba(14, 165, 233, 0.07), transparent 60%);
+}
+
+/* Tactical Panel Utilities */
+.tactical-grid {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(26, 35, 50, 0.35) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(26, 35, 50, 0.35) 1px, transparent 1px);
+}
+
+/* Custom Leaflet Styling */
+.leaflet-container {
+  font-family: inherit !important;
+  outline: none;
+  background: #070a0f !important;
+}
+
+.dark-leaflet-popup .leaflet-popup-content-wrapper {
+  background: #0d121c !important;
+  color: #f1f5f9 !important;
+  border: 1px solid #243044 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.75) !important;
+  padding: 0 !important;
+}
+
+.dark-leaflet-popup .leaflet-popup-content {
+  margin: 10px 12px !important;
+  line-height: 1.4 !important;
+}
+
+.dark-leaflet-popup .leaflet-popup-tip {
+  background: #0d121c !important;
+}
+
+.leaflet-dark-tooltip {
+  background: #090d14 !important;
+  color: #f8fafc !important;
+  border: 1px solid #243044 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.6) !important;
+  padding: 4px 8px !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* Subtle Command Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #070a0f;
+}
+::-webkit-scrollbar-thumb {
+  background: #1a2332;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2b3a52;
+}
