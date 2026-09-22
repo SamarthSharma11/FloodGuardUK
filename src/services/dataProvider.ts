@@ -2,6 +2,8 @@ import { Village, WeatherStation, VillageRiskData, AlertProposal, DashboardSumma
 import { INITIAL_STATIONS } from '../data/stations';
 import { calculateVillageRisk } from '../utils/riskEngine';
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
 /**
  * DataProvider connects to the FloodGuard UK REST API backed by LibSQL/Turso database
  * and Open-Meteo live weather telemetry. Static geospatial vectors remain directly
@@ -71,7 +73,7 @@ class DataProvider {
    */
   async fetchStations(): Promise<WeatherStation[]> {
     try {
-      const res = await fetch('/api/stations');
+      const res = await fetch(`${API_BASE}/api/stations`);
       if (res.ok) {
         this.stations = await res.json();
       }
@@ -100,7 +102,7 @@ class DataProvider {
    * Fetches computed risk for a single village from backend API
    */
   async fetchVillageRisk(villageId: string | number): Promise<VillageRiskData> {
-    const res = await fetch(`/api/villages/${villageId}/risk`);
+    const res = await fetch(`${API_BASE}/api/villages/${villageId}/risk`);
     if (!res.ok) {
       throw new Error(`Failed to fetch risk for village ${villageId}: ${res.statusText}`);
     }
@@ -117,7 +119,7 @@ class DataProvider {
   }> {
     this.currentScenario = scenarioType;
     try {
-      const res = await fetch('/api/scenario/run', {
+      const res = await fetch(`${API_BASE}/api/scenario/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario: scenarioType })
@@ -157,7 +159,7 @@ class DataProvider {
    */
   async fetchAlerts(): Promise<AlertProposal[]> {
     try {
-      const res = await fetch('/api/alerts');
+      const res = await fetch(`${API_BASE}/api/alerts`);
       if (res.ok) {
         this.alerts = await res.json();
       }
@@ -178,7 +180,7 @@ class DataProvider {
    * Approves an alert, persisting status in database and writing to audit log
    */
   async approveAlert(alertId: string, approvedBy?: string): Promise<AlertProposal> {
-    const res = await fetch(`/api/alerts/${alertId}/approve`, {
+    const res = await fetch(`${API_BASE}/api/alerts/${alertId}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ approvedBy })
@@ -196,7 +198,7 @@ class DataProvider {
    * Acknowledges an alert, persisting status in database and writing to audit log
    */
   async acknowledgeAlert(alertId: string, actor?: string): Promise<AlertProposal> {
-    const res = await fetch(`/api/alerts/${alertId}/acknowledge`, {
+    const res = await fetch(`${API_BASE}/api/alerts/${alertId}/acknowledge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ actor })
@@ -214,7 +216,7 @@ class DataProvider {
    * Fetches the audit trail for a specific alert
    */
   async getAlertAudit(alertId: string): Promise<any[]> {
-    const res = await fetch(`/api/alerts/${alertId}/audit`);
+    const res = await fetch(`${API_BASE}/api/alerts/${alertId}/audit`);
     if (!res.ok) {
       throw new Error(`Failed to fetch audit log: ${res.statusText}`);
     }
@@ -225,7 +227,7 @@ class DataProvider {
    * Fetches historical station telemetry from the database
    */
   async getStationReadingsHistory(limit = 100): Promise<any[]> {
-    const res = await fetch(`/api/stations/history?limit=${limit}`);
+    const res = await fetch(`${API_BASE}/api/stations/history?limit=${limit}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch station history: ${res.statusText}`);
     }
