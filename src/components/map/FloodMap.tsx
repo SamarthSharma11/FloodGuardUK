@@ -336,11 +336,17 @@ export const FloodMap: React.FC<FloodMapProps> = ({
       >
         <MapController targetBounds={targetBounds} targetCenter={targetCenter} />
 
-        {/* Dark Matter / CartoDB Base Map tiles */}
+        {/* Esri World Dark Gray Canvas Base Map (Zero API Key, High Performance, No Watermark) */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          maxZoom={19}
+          attribution='&copy; <a href="https://www.esri.com/">Esri</a>, DeLorme, NAVTEQ'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+          maxZoom={16}
+        />
+        <TileLayer
+          attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
+          maxZoom={16}
+          opacity={0.85}
         />
 
         {/* District Boundaries Layer */}
