@@ -1,5 +1,6 @@
 import React from 'react';
 import { useSimulation } from '../context/SimulationContext';
+import { dataProvider } from '../services/dataProvider';
 import { DISTRICTS_META } from '../data/districts';
 import {
   BarChart,
@@ -34,15 +35,48 @@ export const AnalyticsPage: React.FC = () => {
     };
   }).sort((a, b) => b.avgRisk - a.avgRisk);
 
-  // Rainfall trend simulation across 6-hour window
-  const trendData = [
-    { time: 'T-5h', rain: Number(Math.max(0.5, summary.maxRainfall * 0.25).toFixed(1)), risk: Math.max(10, Math.round(summary.averageRisk * 0.4)) },
-    { time: 'T-4h', rain: Number(Math.max(1.0, summary.maxRainfall * 0.45).toFixed(1)), risk: Math.max(12, Math.round(summary.averageRisk * 0.6)) },
-    { time: 'T-3h', rain: Number(Math.max(1.5, summary.maxRainfall * 0.65).toFixed(1)), risk: Math.max(14, Math.round(summary.averageRisk * 0.75)) },
-    { time: 'T-2h', rain: Number(Math.max(2.0, summary.maxRainfall * 0.85).toFixed(1)), risk: Math.max(15, Math.round(summary.averageRisk * 0.9)) },
-    { time: 'T-1h', rain: Number(Math.max(2.5, summary.maxRainfall * 0.95).toFixed(1)), risk: Math.max(16, Math.round(summary.averageRisk * 0.98)) },
-    { time: 'Now', rain: Number(summary.maxRainfall.toFixed(1)), risk: summary.averageRisk },
-  ];
+  // Live station history from Turso/LibSQL database
+  const [historyReadings, setHistoryReadings] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    dataProvider.getStationReadingsHistory(100).then(data => {
+      if (data && data.length > 0) {
+        setHistoryReadings(data);
+      }
+    }).catch(console.error);
+  }, [summary.activeScenario, stations]);
+
+  const trendData = React.useMemo(() => {
+    if (historyReadings.length >= 2) {
+      const groups: Record<string, { rainSum: number; maxRain: number; count: number; time: string }> = {};
+      const sorted = [...historyReadings].reverse();
+      for (const r of sorted) {
+        const t = new Date(r.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (!groups[t]) {
+          groups[t] = { rainSum: 0, maxRain: 0, count: 0, time: t };
+        }
+        groups[t].rainSum += r.rainfall;
+        if (r.rainfall > groups[t].maxRain) groups[t].maxRain = r.rainfall;
+        groups[t].count++;
+      }
+      const points = Object.values(groups).slice(-6);
+      if (points.length >= 2) {
+        return points.map(p => ({
+          time: p.time,
+          rain: Number(p.maxRain.toFixed(1)),
+          risk: Math.min(100, Math.round(p.maxRain * 1.3 + summary.averageRisk * 0.3))
+        }));
+      }
+    }
+    return [
+      { time: 'T-5h', rain: Number(Math.max(0.5, summary.maxRainfall * 0.25).toFixed(1)), risk: Math.max(10, Math.round(summary.averageRisk * 0.4)) },
+      { time: 'T-4h', rain: Number(Math.max(1.0, summary.maxRainfall * 0.45).toFixed(1)), risk: Math.max(12, Math.round(summary.averageRisk * 0.6)) },
+      { time: 'T-3h', rain: Number(Math.max(1.5, summary.maxRainfall * 0.65).toFixed(1)), risk: Math.max(14, Math.round(summary.averageRisk * 0.75)) },
+      { time: 'T-2h', rain: Number(Math.max(2.0, summary.maxRainfall * 0.85).toFixed(1)), risk: Math.max(15, Math.round(summary.averageRisk * 0.9)) },
+      { time: 'T-1h', rain: Number(Math.max(2.5, summary.maxRainfall * 0.95).toFixed(1)), risk: Math.max(16, Math.round(summary.averageRisk * 0.98)) },
+      { time: 'Now', rain: Number(summary.maxRainfall.toFixed(1)), risk: summary.averageRisk },
+    ];
+  }, [historyReadings, summary]);
 
   return (
     <div className="space-y-4 font-mono text-xs">

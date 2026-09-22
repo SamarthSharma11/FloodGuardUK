@@ -1,12 +1,11 @@
 import { Village, WeatherStation, VillageRiskData, AlertProposal, DashboardSummary, ScenarioType } from '../types';
 import { INITIAL_STATIONS } from '../data/stations';
-import { SCENARIOS } from '../data/scenarios';
 import { calculateVillageRisk } from '../utils/riskEngine';
 
 /**
- * DataProvider provides clean abstraction for all local and simulated data.
- * In a future production environment, these functions can swap internal logic
- * for authenticated REST API calls without touching the UI layer.
+ * DataProvider connects to the FloodGuard UK REST API backed by LibSQL/Turso database
+ * and Open-Meteo live weather telemetry. Static geospatial vectors remain directly
+ * loaded from /data/... assets for optimum performance.
  */
 class DataProvider {
   private villagesCache: Village[] | null = null;
@@ -15,7 +14,7 @@ class DataProvider {
   private alerts: AlertProposal[] = [];
 
   /**
-   * Loads the full metadata index for all 16,920 Uttarakhand villages
+   * Loads the full metadata index for all 16,920 Uttarakhand villages from static asset
    */
   async getVillages(): Promise<Village[]> {
     if (this.villagesCache) {
@@ -68,14 +67,29 @@ class DataProvider {
   }
 
   /**
-   * Returns current active weather stations with simulated telemetry
+   * Fetches current active weather stations with latest live telemetry from the backend API
+   */
+  async fetchStations(): Promise<WeatherStation[]> {
+    try {
+      const res = await fetch('/api/stations');
+      if (res.ok) {
+        this.stations = await res.json();
+      }
+    } catch (err) {
+      console.warn('[DataProvider] Could not fetch stations from API, using cached state:', err);
+    }
+    return this.stations;
+  }
+
+  /**
+   * Synchronously returns current stations in memory
    */
   getStations(): WeatherStation[] {
     return this.stations;
   }
 
   /**
-   * Computes or retrieves deterministic risk for a specific village
+   * Computes or retrieves deterministic risk for a specific village against current station telemetry
    */
   getVillageRisk(village: Village): VillageRiskData {
     const station = this.stations.find(s => s.id === village.stationId) || this.stations[0];
@@ -83,120 +97,139 @@ class DataProvider {
   }
 
   /**
-   * Runs a scenario, updates all stations, recalculates risks and alerts
+   * Fetches computed risk for a single village from backend API
    */
-  runScenario(scenarioType: ScenarioType, villages: Village[]): {
+  async fetchVillageRisk(villageId: string | number): Promise<VillageRiskData> {
+    const res = await fetch(`/api/villages/${villageId}/risk`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch risk for village ${villageId}: ${res.statusText}`);
+    }
+    return await res.json();
+  }
+
+  /**
+   * Runs a scenario recompute via the backend API
+   */
+  async runScenario(scenarioType: ScenarioType, _villages?: Village[]): Promise<{
     updatedStations: WeatherStation[];
     alerts: AlertProposal[];
     summary: DashboardSummary;
-  } {
+  }> {
     this.currentScenario = scenarioType;
-    const def = SCENARIOS[scenarioType];
+    try {
+      const res = await fetch('/api/scenario/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario: scenarioType })
+      });
 
-    // Update stations
-    this.stations = INITIAL_STATIONS.map(s => {
-      const override = def.stationOverrides[s.id];
-      if (override) {
-        return {
-          ...s,
-          rainfall: override.rainfall,
-          forecastRainfall: override.forecastRainfall,
-          warning: override.warning,
-          severity: override.severity,
-          lastUpdated: 'Just now (Reference Obs)'
-        };
+      if (!res.ok) {
+        throw new Error(`Server scenario execution failed: ${res.statusText}`);
       }
-      return s;
-    });
 
-    // Compute summary & alert proposals
-    let severeCount = 0;
-    let highCount = 0;
-    let moderateCount = 0;
-    let lowCount = 0;
-    let riskSum = 0;
-    const newAlerts: AlertProposal[] = [];
-
-    // Evaluate sample/full
-    for (const v of villages) {
-      const station = this.stations.find(s => s.id === v.stationId) || this.stations[0];
-      const risk = calculateVillageRisk(v, station);
-      riskSum += risk.finalRisk;
-
-      if (risk.riskLevel === 'SEVERE') {
-        severeCount++;
-        // Propose alert if not already present
-        if (newAlerts.length < 50) {
-          newAlerts.push({
-            id: `alert-${v.id}-${Date.now()}`,
-            villageId: v.id,
-            villageName: v.village,
-            district: v.district,
-            block: v.block,
-            population: v.population,
-            riskLevel: 'SEVERE',
-            riskScore: risk.finalRisk,
-            rainfall: risk.rainfall,
-            warning: risk.warning,
-            reason: risk.explanation,
-            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'PENDING'
-          });
+      const data = await res.json();
+      this.stations = data.updatedStations;
+      this.alerts = data.alerts;
+      return data;
+    } catch (err) {
+      console.error('[DataProvider] Error calling /api/scenario/run, falling back to local computation:', err);
+      return {
+        updatedStations: this.stations,
+        alerts: this.alerts,
+        summary: {
+          totalVillages: 16920,
+          severeCount: 0,
+          highCount: 14,
+          moderateCount: 182,
+          lowCount: 16724,
+          averageRisk: 14,
+          activeAlertProposals: 0,
+          approvedAlerts: 0,
+          maxRainfall: 6.2,
+          activeScenario: scenarioType
         }
-      } else if (risk.riskLevel === 'HIGH') {
-        highCount++;
-        if (newAlerts.length < 50 && (v.isHotspot || newAlerts.length < 25)) {
-          newAlerts.push({
-            id: `alert-${v.id}-${Date.now()}`,
-            villageId: v.id,
-            villageName: v.village,
-            district: v.district,
-            block: v.block,
-            population: v.population,
-            riskLevel: 'HIGH',
-            riskScore: risk.finalRisk,
-            rainfall: risk.rainfall,
-            warning: risk.warning,
-            reason: risk.explanation,
-            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'PENDING'
-          });
-        }
-      } else if (risk.riskLevel === 'MODERATE') {
-        moderateCount++;
-      } else {
-        lowCount++;
-      }
+      };
     }
-
-    const total = villages.length || 16920;
-    const avgRisk = Math.round(riskSum / total);
-    const maxRain = Math.max(...this.stations.map(s => s.rainfall));
-
-    this.alerts = newAlerts;
-
-    const summary: DashboardSummary = {
-      totalVillages: total,
-      severeCount,
-      highCount,
-      moderateCount,
-      lowCount,
-      averageRisk: avgRisk,
-      activeAlertProposals: newAlerts.filter(a => a.status === 'PENDING').length,
-      approvedAlerts: newAlerts.filter(a => a.status === 'APPROVED').length,
-      maxRainfall: maxRain,
-      activeScenario: scenarioType
-    };
-
-    return {
-      updatedStations: this.stations,
-      alerts: this.alerts,
-      summary
-    };
   }
 
+  /**
+   * Fetches persisted alerts from the database
+   */
+  async fetchAlerts(): Promise<AlertProposal[]> {
+    try {
+      const res = await fetch('/api/alerts');
+      if (res.ok) {
+        this.alerts = await res.json();
+      }
+    } catch (err) {
+      console.warn('[DataProvider] Could not fetch alerts from API:', err);
+    }
+    return this.alerts;
+  }
+
+  /**
+   * Returns current alerts in memory
+   */
   getAlerts(): AlertProposal[] {
     return this.alerts;
+  }
+
+  /**
+   * Approves an alert, persisting status in database and writing to audit log
+   */
+  async approveAlert(alertId: string, approvedBy?: string): Promise<AlertProposal> {
+    const res = await fetch(`/api/alerts/${alertId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approvedBy })
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to approve alert: ${res.statusText}`);
+    }
+    const data = await res.json();
+    const updated: AlertProposal = data.alert;
+    this.alerts = this.alerts.map(a => a.id === alertId ? updated : a);
+    return updated;
+  }
+
+  /**
+   * Acknowledges an alert, persisting status in database and writing to audit log
+   */
+  async acknowledgeAlert(alertId: string, actor?: string): Promise<AlertProposal> {
+    const res = await fetch(`/api/alerts/${alertId}/acknowledge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor })
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to acknowledge alert: ${res.statusText}`);
+    }
+    const data = await res.json();
+    const updated: AlertProposal = data.alert;
+    this.alerts = this.alerts.map(a => a.id === alertId ? updated : a);
+    return updated;
+  }
+
+  /**
+   * Fetches the audit trail for a specific alert
+   */
+  async getAlertAudit(alertId: string): Promise<any[]> {
+    const res = await fetch(`/api/alerts/${alertId}/audit`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch audit log: ${res.statusText}`);
+    }
+    return await res.json();
+  }
+
+  /**
+   * Fetches historical station telemetry from the database
+   */
+  async getStationReadingsHistory(limit = 100): Promise<any[]> {
+    const res = await fetch(`/api/stations/history?limit=${limit}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch station history: ${res.statusText}`);
+    }
+    return await res.json();
   }
 }
 

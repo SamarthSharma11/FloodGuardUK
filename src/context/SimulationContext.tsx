@@ -51,7 +51,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [selectedDistrict, setSelectedDistrict] = useState<string>('ALL');
   const [notification, setNotification] = useState<string | null>(null);
 
-  // Load villages index on startup
+  // Load villages index and initialize with live backend data on startup
   useEffect(() => {
     let mounted = true;
     async function loadData() {
@@ -60,21 +60,24 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (mounted) {
           setAllVillages(villages);
           setIsLoadingVillages(false);
-          // Run initial baseline scenario
-          const res = dataProvider.runScenario('NORMAL', villages);
-          setStations(res.updatedStations);
-          setSummary(res.summary);
-          setAlerts(res.alerts);
 
-          // Select Joshimath by default for demo readiness
-          const joshimath = villages.find(v => v.village.toLowerCase().includes('joshimath') && v.isHotspot) || villages[0];
-          if (joshimath) {
-            setSelectedVillage(joshimath);
-            setSelectedVillageRisk(dataProvider.getVillageRisk(joshimath));
+          // Connect to backend API for initial live data & persistent alerts
+          const res = await dataProvider.runScenario('NORMAL');
+          if (mounted) {
+            setStations(res.updatedStations);
+            setSummary(res.summary);
+            setAlerts(res.alerts);
+
+            // Select Joshimath by default for demo readiness
+            const joshimath = villages.find(v => v.village.toLowerCase().includes('joshimath') && v.isHotspot) || villages[0];
+            if (joshimath) {
+              setSelectedVillage(joshimath);
+              setSelectedVillageRisk(dataProvider.getVillageRisk(joshimath));
+            }
           }
         }
       } catch (err) {
-        console.error('Error loading village index:', err);
+        console.error('Error loading initial intelligence state:', err);
         setIsLoadingVillages(false);
       }
     }
@@ -90,21 +93,25 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [stations, selectedVillage]);
 
-  const changeScenario = useCallback((scenario: ScenarioType) => {
+  const changeScenario = useCallback(async (scenario: ScenarioType) => {
     setCurrentScenario(scenario);
-    const res = dataProvider.runScenario(scenario, allVillages);
-    setStations(res.updatedStations);
-    setSummary(res.summary);
-    setAlerts(res.alerts);
+    try {
+      const res = await dataProvider.runScenario(scenario);
+      setStations(res.updatedStations);
+      setSummary(res.summary);
+      setAlerts(res.alerts);
 
-    const scenarioDef = SCENARIOS[scenario];
-    setNotification(`Scenario activated: ${scenarioDef.title}`);
+      const scenarioDef = SCENARIOS[scenario];
+      setNotification(`Scenario activated: ${scenarioDef.title}`);
 
-    if (selectedVillage) {
-      const risk = dataProvider.getVillageRisk(selectedVillage);
-      setSelectedVillageRisk(risk);
+      if (selectedVillage) {
+        const risk = dataProvider.getVillageRisk(selectedVillage);
+        setSelectedVillageRisk(risk);
+      }
+    } catch (err) {
+      console.error('Failed to change scenario via API:', err);
     }
-  }, [allVillages, selectedVillage]);
+  }, [selectedVillage]);
 
   const selectVillage = useCallback((village: Village | null) => {
     setSelectedVillage(village);
@@ -116,13 +123,14 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, []);
 
-  const approveAlert = useCallback((alertId: string) => {
+  const approveAlert = useCallback(async (alertId: string) => {
+    // Optimistic UI update
     setAlerts(prev => prev.map(a => {
       if (a.id === alertId) {
         return {
           ...a,
           status: 'APPROVED',
-          approvedBy: 'Disaster Authority (Demo Control)',
+          approvedBy: 'Disaster Authority (State Command)',
           approvedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
         };
       }
@@ -133,10 +141,19 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       activeAlertProposals: Math.max(0, prev.activeAlertProposals - 1),
       approvedAlerts: prev.approvedAlerts + 1
     }));
-    setNotification('Alert approved and marked for dissemination.');
+    setNotification('Alert authorized and broadcast to state emergency network.');
+
+    // Persist to LibSQL database & audit log
+    try {
+      const updated = await dataProvider.approveAlert(alertId, 'Disaster Authority (State Command)');
+      setAlerts(prev => prev.map(a => a.id === alertId ? updated : a));
+    } catch (err) {
+      console.error('Failed to persist alert approval to database:', err);
+    }
   }, []);
 
-  const acknowledgeAlert = useCallback((alertId: string) => {
+  const acknowledgeAlert = useCallback(async (alertId: string) => {
+    // Optimistic UI update
     setAlerts(prev => prev.map(a => {
       if (a.id === alertId) {
         return {
@@ -147,7 +164,15 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
       return a;
     }));
-    setNotification('Alert marked as acknowledged.');
+    setNotification('Alert acknowledged and archived to audit log.');
+
+    // Persist to LibSQL database & audit log
+    try {
+      const updated = await dataProvider.acknowledgeAlert(alertId, 'District Emergency Operation Center');
+      setAlerts(prev => prev.map(a => a.id === alertId ? updated : a));
+    } catch (err) {
+      console.error('Failed to persist alert acknowledgement to database:', err);
+    }
   }, []);
 
   const getVillageRisk = useCallback((village: Village) => {
