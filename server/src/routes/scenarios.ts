@@ -170,6 +170,46 @@ router.post('/run', async (req: Request, res: Response) => {
       }
     }
 
+    // 3b. Auto-dispatch email proposals for top severe alerts if in active emergency scenario
+    if (scenario !== 'NORMAL' && generatedAlerts.length > 0) {
+      const topAlertsToEmail = generatedAlerts.slice(0, 3);
+      for (const alert of topAlertsToEmail) {
+        const existingEmail = await db.execute({
+          sql: 'SELECT id FROM alert_emails WHERE alertId = ?',
+          args: [alert.id]
+        });
+        if (existingEmail.rows.length === 0) {
+          const emailId = `email-${alert.id}-${Date.now().toString(36)}`;
+          const approvalToken = `tok_${Math.random().toString(36).substring(2, 10)}_${alert.id}`;
+          const sentAt = new Date().toISOString();
+          const recipient = 'seoc-duty-magistrate@uk.gov.in';
+          const subject = `[URGENT SEOC DISPATCH] Flash Flood Risk Authorization Required: ${alert.villageName}, ${alert.district} (Risk ${alert.riskScore}/100)`;
+          const sender = 'State Emergency Operation Centre (alerts@sdma.uk.gov.in)';
+
+          await db.execute({
+            sql: `INSERT INTO alert_emails (id, alertId, recipient, subject, sender, sentAt, status, villageName, district, riskLevel, riskScore, rainfall, warning, reason, approvalToken)
+                  VALUES (?, ?, ?, ?, ?, ?, 'SENT', ?, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [
+              emailId,
+              alert.id,
+              recipient,
+              subject,
+              sender,
+              sentAt,
+              String(alert.villageName),
+              String(alert.district),
+              String(alert.riskLevel),
+              Number(alert.riskScore),
+              Number(alert.rainfall),
+              String(alert.warning),
+              String(alert.reason),
+              approvalToken
+            ]
+          });
+        }
+      }
+    }
+
     // Fetch all alerts from DB to maintain persistent approved/acknowledged states
     const dbAlertsResult = await db.execute('SELECT * FROM alerts ORDER BY riskScore DESC');
     const allDbAlerts: AlertProposal[] = dbAlertsResult.rows.map(r => ({

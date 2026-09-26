@@ -98,6 +98,26 @@ export interface AlertProposal {
   acknowledgedAt?: string;
 }
 
+export interface AlertEmail {
+  id: string;
+  alertId: string;
+  recipient: string;
+  subject: string;
+  sender: string;
+  sentAt: string;
+  status: 'SENT' | 'APPROVED' | 'ARCHIVED';
+  villageName: string;
+  district: string;
+  riskLevel: 'HIGH' | 'SEVERE';
+  riskScore: number;
+  rainfall: number;
+  warning: WarningLevel;
+  reason: string;
+  approvalToken: string;
+  approvedAt?: string;
+  approvedBy?: string;
+}
+
 export interface DashboardSummary {
   totalVillages: number;
   severeCount: number;

@@ -61,5 +61,28 @@ export async function initDb() {
     )
   `);
 
+  // 4. Alert Emails table for authority email dispatch and sign-off
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS alert_emails (
+      id TEXT PRIMARY KEY,
+      alertId TEXT NOT NULL,
+      recipient TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      sender TEXT NOT NULL,
+      sentAt TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'SENT',
+      villageName TEXT NOT NULL,
+      district TEXT NOT NULL,
+      riskLevel TEXT NOT NULL,
+      riskScore INTEGER NOT NULL,
+      rainfall REAL NOT NULL,
+      warning TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      approvalToken TEXT NOT NULL,
+      approvedAt TEXT,
+      approvedBy TEXT
+    )
+  `);
+
   console.log('[Database] Schema verification & migrations complete.');
 }

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Village, WeatherStation, VillageRiskData, AlertProposal, DashboardSummary, ScenarioType } from '../types';
+import { Village, WeatherStation, VillageRiskData, AlertProposal, AlertEmail, DashboardSummary, ScenarioType } from '../types';
 import { dataProvider } from '../services/dataProvider';
 import { SCENARIOS } from '../data/scenarios';
 import { INITIAL_STATIONS } from '../data/stations';
@@ -11,6 +11,9 @@ interface SimulationContextType {
   currentScenario: ScenarioType;
   summary: DashboardSummary;
   alerts: AlertProposal[];
+  emails: AlertEmail[];
+  isEmailModalOpen: boolean;
+  selectedEmailId: string | null;
   selectedVillage: Village | null;
   selectedVillageRisk: VillageRiskData | null;
   selectedDistrict: string;
@@ -22,6 +25,11 @@ interface SimulationContextType {
   acknowledgeAlert: (alertId: string) => void;
   getVillageRisk: (village: Village) => VillageRiskData;
   dismissNotification: () => void;
+  openEmailModal: (emailId?: string) => void;
+  closeEmailModal: () => void;
+  refreshEmails: () => Promise<void>;
+  dispatchAlertEmail: (alertId: string, recipient?: string) => Promise<void>;
+  approveAlertViaEmail: (alertId: string) => Promise<void>;
 }
 
 const defaultSummary: DashboardSummary = {
@@ -46,6 +54,9 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [currentScenario, setCurrentScenario] = useState<ScenarioType>('NORMAL');
   const [summary, setSummary] = useState<DashboardSummary>(defaultSummary);
   const [alerts, setAlerts] = useState<AlertProposal[]>([]);
+  const [emails, setEmails] = useState<AlertEmail[]>([]);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
+  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [selectedVillage, setSelectedVillage] = useState<Village | null>(null);
   const [selectedVillageRisk, setSelectedVillageRisk] = useState<VillageRiskData | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<string>('ALL');
@@ -63,10 +74,12 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
           // Connect to backend API for initial live data & persistent alerts
           const res = await dataProvider.runScenario('NORMAL');
+          const emailList = await dataProvider.fetchEmails();
           if (mounted) {
             setStations(res.updatedStations);
             setSummary(res.summary);
             setAlerts(res.alerts);
+            setEmails(emailList);
 
             // Select Joshimath by default for demo readiness
             const joshimath = villages.find(v => v.village.toLowerCase().includes('joshimath') && v.isHotspot) || villages[0];
@@ -100,6 +113,10 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setStations(res.updatedStations);
       setSummary(res.summary);
       setAlerts(res.alerts);
+
+      // Refresh email dispatch inbox
+      const emailList = await dataProvider.fetchEmails();
+      setEmails(emailList);
 
       const scenarioDef = SCENARIOS[scenario];
       setNotification(`Scenario activated: ${scenarioDef.title}`);
@@ -183,6 +200,65 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setNotification(null);
   }, []);
 
+  const refreshEmails = useCallback(async () => {
+    try {
+      const emailList = await dataProvider.fetchEmails();
+      setEmails(emailList);
+    } catch (err) {
+      console.error('Failed to refresh emails:', err);
+    }
+  }, []);
+
+  const openEmailModal = useCallback((emailId?: string) => {
+    if (emailId) setSelectedEmailId(emailId);
+    setIsEmailModalOpen(true);
+  }, []);
+
+  const closeEmailModal = useCallback(() => {
+    setIsEmailModalOpen(false);
+    setSelectedEmailId(null);
+  }, []);
+
+  const dispatchAlertEmail = useCallback(async (alertId: string, recipient?: string) => {
+    try {
+      const email = await dataProvider.dispatchAlertEmail(alertId, recipient);
+      setEmails(prev => [email, ...prev.filter(e => e.id !== email.id)]);
+      setNotification(`Official SEOC dispatch email transmitted for alert #${alertId.slice(0, 8)}`);
+    } catch (err) {
+      console.error('Failed to dispatch alert email:', err);
+      setNotification('Failed to dispatch emergency sign-off email.');
+    }
+  }, []);
+
+  const approveAlertViaEmail = useCallback(async (alertId: string) => {
+    try {
+      const updated = await dataProvider.approveAlertViaEmail(alertId, 'SEOC Duty Magistrate (via Email Authorization)');
+      // Update alert in list
+      setAlerts(prev => prev.map(a => a.id === alertId ? updated : a));
+      // Update emails list
+      setEmails(prev => prev.map(e => {
+        if (e.alertId === alertId) {
+          return {
+            ...e,
+            status: 'APPROVED',
+            approvedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            approvedBy: 'SEOC Duty Magistrate (via Email Authorization)'
+          };
+        }
+        return e;
+      }));
+      setSummary(prev => ({
+        ...prev,
+        activeAlertProposals: Math.max(0, prev.activeAlertProposals - 1),
+        approvedAlerts: prev.approvedAlerts + 1
+      }));
+      setNotification(`Emergency broadcast authorized via executive email for ${updated.villageName} (${updated.district})!`);
+    } catch (err) {
+      console.error('Failed to approve alert via email:', err);
+      setNotification('Failed to process email authorization.');
+    }
+  }, []);
+
   return (
     <SimulationContext.Provider
       value={{
@@ -192,6 +268,9 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         currentScenario,
         summary,
         alerts,
+        emails,
+        isEmailModalOpen,
+        selectedEmailId,
         selectedVillage,
         selectedVillageRisk,
         selectedDistrict,
@@ -202,7 +281,12 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         approveAlert,
         acknowledgeAlert,
         getVillageRisk,
-        dismissNotification
+        dismissNotification,
+        openEmailModal,
+        closeEmailModal,
+        refreshEmails,
+        dispatchAlertEmail,
+        approveAlertViaEmail
       }}
     >
       {children}

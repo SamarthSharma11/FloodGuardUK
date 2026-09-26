@@ -233,6 +233,55 @@ class DataProvider {
     }
     return await res.json();
   }
+
+  /**
+   * Fetches all authority dispatch emails from database
+   */
+  async fetchEmails(): Promise<any[]> {
+    try {
+      const res = await fetch(`${API_BASE}/api/alerts/emails/list`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[DataProvider] Could not fetch alert emails:', err);
+    }
+    return [];
+  }
+
+  /**
+   * Dispatches an emergency sign-off email to the authority
+   */
+  async dispatchAlertEmail(alertId: string, recipient?: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/alerts/${alertId}/dispatch-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient })
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to dispatch alert email: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data.email;
+  }
+
+  /**
+   * Approves an alert via email authorization token
+   */
+  async approveAlertViaEmail(alertId: string, actor?: string): Promise<AlertProposal> {
+    const res = await fetch(`${API_BASE}/api/alerts/${alertId}/email-approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor })
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to approve alert via email: ${res.statusText}`);
+    }
+    const data = await res.json();
+    const updated: AlertProposal = data.alert;
+    this.alerts = this.alerts.map(a => a.id === alertId ? updated : a);
+    return updated;
+  }
 }
 
 export const dataProvider = new DataProvider();

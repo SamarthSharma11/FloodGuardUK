@@ -9,13 +9,24 @@ import {
   ShieldCheck,
   Check,
   Radio,
-  CloudRain
+  CloudRain,
+  Mail,
+  Send,
+  ExternalLink
 } from 'lucide-react';
 
 export const AlertsPage: React.FC = () => {
-  const { alerts, approveAlert, acknowledgeAlert } = useSimulation();
+  const {
+    alerts,
+    approveAlert,
+    acknowledgeAlert,
+    emails,
+    openEmailModal,
+    dispatchAlertEmail
+  } = useSimulation();
   const [statusFilter, setStatusFilter] = useState<'ALL' | AlertStatus>('ALL');
   const [severityFilter, setSeverityFilter] = useState<'ALL' | 'SEVERE' | 'HIGH'>('ALL');
+  const [sendingEmailForId, setSendingEmailForId] = useState<string | null>(null);
 
   const filteredAlerts = alerts.filter(a => {
     if (statusFilter !== 'ALL' && a.status !== statusFilter) return false;
@@ -61,6 +72,34 @@ export const AlertsPage: React.FC = () => {
             <span>Archived: <strong className="tabular-nums">{ackCount}</strong></span>
           </div>
         </div>
+      </div>
+
+      {/* Executive Governance Banner */}
+      <div className="bg-command-900 border border-command-750 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-7 h-7 rounded bg-command-950 border border-command-700 flex items-center justify-center text-sky-400 shrink-0">
+            <Mail className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <span className="font-bold text-slate-200">Two-Tier Executive Authorization Protocol:</span>
+            <span className="text-slate-400 font-sans ml-1">
+              Alerts can be dispatched to the State Emergency Operation Centre (SEOC) email inbox for executive sign-off, or overridden via direct command.
+            </span>
+          </div>
+        </div>
+
+        <button
+          onClick={() => openEmailModal()}
+          className="px-3 py-1.5 bg-sky-950/80 border border-sky-600/50 hover:bg-sky-900/80 text-sky-300 font-bold text-xs rounded-xs transition-colors shrink-0 flex items-center space-x-1.5 shadow-xs"
+        >
+          <Mail className="w-3.5 h-3.5" />
+          <span>Open Authority Mailbox</span>
+          {emails.filter(e => e.status === 'SENT').length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px]">
+              {emails.filter(e => e.status === 'SENT').length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Filter Tabs & Severity Dropdown */}
@@ -129,6 +168,8 @@ export const AlertsPage: React.FC = () => {
         ) : (
           filteredAlerts.map(alert => {
             const isSevere = alert.riskLevel === 'SEVERE';
+            const matchingEmail = emails.find(e => e.alertId === alert.id);
+
             return (
               <div
                 key={alert.id}
@@ -205,30 +246,75 @@ export const AlertsPage: React.FC = () => {
                 </div>
 
                 {/* Bottom Row: Actions */}
-                <div className="pt-2 flex items-center justify-end space-x-2 border-t border-command-800/60 text-xs">
-                  {alert.status === 'PENDING' && (
-                    <button
-                      onClick={() => approveAlert(alert.id)}
-                      className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-600 text-white font-bold transition-colors inline-flex items-center space-x-1.5 shadow-sm"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Authorize Emergency Broadcast</span>
-                    </button>
-                  )}
-                  {alert.status === 'APPROVED' && (
-                    <button
-                      onClick={() => acknowledgeAlert(alert.id)}
-                      className="px-3.5 py-1.5 bg-sky-700 hover:bg-sky-600 text-white font-bold transition-colors inline-flex items-center space-x-1.5 shadow-sm"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Acknowledge Protocol</span>
-                    </button>
-                  )}
-                  {alert.status === 'ACKNOWLEDGED' && (
-                    <span className="text-slate-500 text-[10px]">
-                      ✓ Emergency broadcast execution confirmed and logged
-                    </span>
-                  )}
+                <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-command-800/60 text-xs">
+                  <div className="text-[11px] text-slate-400">
+                    {matchingEmail ? (
+                      <span className="inline-flex items-center space-x-1 text-sky-300">
+                        <Mail className="w-3 h-3" />
+                        <span>Dispatched to {matchingEmail.recipient}</span>
+                        {matchingEmail.status === 'APPROVED' && (
+                          <span className="text-emerald-400 font-bold ml-1">• Signed Off via Email</span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">Awaiting executive action</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    {alert.status === 'PENDING' && (
+                      <>
+                        {matchingEmail ? (
+                          <button
+                            onClick={() => openEmailModal(matchingEmail.id)}
+                            className="px-3 py-1.5 bg-command-800 hover:bg-command-700 text-sky-300 font-medium transition-colors inline-flex items-center space-x-1.5 border border-command-700"
+                          >
+                            <Mail className="w-3.5 h-3.5 text-sky-400" />
+                            <span>Review in Mailbox</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              setSendingEmailForId(alert.id);
+                              try {
+                                await dispatchAlertEmail(alert.id);
+                                openEmailModal();
+                              } finally {
+                                setSendingEmailForId(null);
+                              }
+                            }}
+                            disabled={sendingEmailForId === alert.id}
+                            className="px-3 py-1.5 bg-command-800 hover:bg-command-700 text-slate-200 font-medium transition-colors inline-flex items-center space-x-1.5 border border-command-700"
+                          >
+                            <Send className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{sendingEmailForId === alert.id ? 'Dispatching...' : 'Dispatch to Email'}</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => approveAlert(alert.id)}
+                          className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-600 text-white font-bold transition-colors inline-flex items-center space-x-1.5 shadow-sm"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Authorize Direct</span>
+                        </button>
+                      </>
+                    )}
+                    {alert.status === 'APPROVED' && (
+                      <button
+                        onClick={() => acknowledgeAlert(alert.id)}
+                        className="px-3.5 py-1.5 bg-sky-700 hover:bg-sky-600 text-white font-bold transition-colors inline-flex items-center space-x-1.5 shadow-sm"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Acknowledge Protocol</span>
+                      </button>
+                    )}
+                    {alert.status === 'ACKNOWLEDGED' && (
+                      <span className="text-slate-500 text-[10px]">
+                        ✓ Emergency broadcast execution confirmed and logged
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
