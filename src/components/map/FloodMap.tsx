@@ -256,7 +256,7 @@ export const FloodMap: React.FC<FloodMapProps> = ({
   }, []);
 
   return (
-    <div className={`relative w-full border border-command-800 bg-[#070a0f] ${heightClass}`}>
+    <div className={`relative isolate overflow-hidden w-full border border-command-800 bg-[#070a0f] ${heightClass}`}>
       {/* Top Filter Bar */}
       {showControls && (
         <div className="absolute top-2.5 left-2.5 z-[400] flex flex-wrap items-center gap-1.5 bg-command-900/95 backdrop-blur-md p-1.5 border border-command-750 shadow-2xl text-xs font-mono">

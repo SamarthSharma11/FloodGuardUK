@@ -64,7 +64,7 @@ export const DemoMailboxModal: React.FC<DemoMailboxModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[2000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
       <div className="bg-command-950 border border-command-750 shadow-2xl w-full max-w-5xl h-[88vh] max-h-[850px] flex flex-col rounded-sm overflow-hidden font-mono">
         
         {/* Government Header Bar */}

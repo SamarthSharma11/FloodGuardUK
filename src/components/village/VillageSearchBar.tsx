@@ -79,7 +79,7 @@ export const VillageSearchBar: React.FC<VillageSearchBarProps> = ({
 
       {/* Autocomplete Dropdown */}
       {isOpen && results.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-command-900 border border-command-750 shadow-2xl max-h-72 overflow-y-auto divide-y divide-command-800/80">
+        <div className="absolute z-[1000] left-0 right-0 mt-1 bg-command-900 border border-command-750 shadow-2xl max-h-72 overflow-y-auto divide-y divide-command-800/80">
           <div className="px-2.5 py-1 text-[9px] font-mono text-slate-400 uppercase tracking-wider bg-command-950 flex justify-between">
             <span>Query Results</span>
             <span className="text-slate-500">{results.length} Matches</span>

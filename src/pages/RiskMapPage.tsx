@@ -10,9 +10,9 @@ export const RiskMapPage: React.FC = () => {
   const [showPanel, setShowPanel] = useState(true);
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
       {/* Tactical Top Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-command-900 border border-command-800 p-2.5">
+      <div className="flex-shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-command-900 border border-command-800 p-2.5">
         <div className="flex items-center space-x-2.5 font-mono text-xs">
           <Layers className="w-4 h-4 text-sky-400" />
           <span className="font-bold uppercase tracking-wider text-slate-100">
@@ -42,14 +42,14 @@ export const RiskMapPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Interactive Map Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
-        <div className={showPanel ? 'lg:col-span-8 shadow-xl' : 'lg:col-span-12 shadow-xl'}>
-          <FloodMap heightClass="h-[calc(100vh-10.5rem)]" showControls={true} />
+      {/* Main Interactive Map Layout — fills remaining height exactly */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch overflow-hidden pt-3">
+        <div className={`min-h-0 ${showPanel ? 'lg:col-span-8' : 'lg:col-span-12'} shadow-xl`}>
+          <FloodMap heightClass="h-full" showControls={true} />
         </div>
 
         {showPanel && (
-          <div className="lg:col-span-4">
+          <div className="lg:col-span-4 min-h-0 overflow-y-auto">
             <VillageRiskCard onClose={() => setShowPanel(false)} />
           </div>
         )}
